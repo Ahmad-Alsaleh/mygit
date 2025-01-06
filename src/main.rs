@@ -59,30 +59,34 @@ fn main() -> anyhow::Result<()> {
                 .to_str()
                 .context(".git/objects file header is invalid UTF-8")?;
 
-            let Some(size) = header.strip_prefix("blob ") else {
-                bail!(".git/objects file header did not start with `blob `. Found: `{header}`");
+            let Some((kind, size)) = header.split_once(' ') else {
+                bail!(".git/objects file header didn't have a space");
             };
 
-            let size = size.parse::<usize>().context(format!(
-                ".git/objects file header has invalide size `{size}`"
-            ))?;
+            match kind {
+                "blob" => {
+                    let size = size.parse::<usize>().context(format!(
+                        ".git/objects file header has invalide size `{size}`"
+                    ))?;
 
-            buf.resize(size, 0);
-            reader
-                .read_exact(&mut buf)
-                .context(".git/objects file contents exceeded given size in header")?;
-            let n = reader
-                .read(&mut [0])
-                .context("validate EOF in .git/objects")?;
-            ensure!(
-                n == 0,
-                ".git/object file has extra trailing bytes, expected {size} bytes only"
-            );
+                    buf.resize(size, 0);
+                    reader
+                        .read_exact(&mut buf)
+                        .context(".git/objects file contents exceeded given size in header")?;
+                    let n = reader
+                        .read(&mut [0])
+                        .context("validate EOF in .git/objects")?;
+                    ensure!(
+                        n == 0,
+                        ".git/object file has extra trailing bytes, expected {size} bytes only"
+                    );
 
-            let mut stdout = io::stdout().lock();
-            stdout.write_all(&buf).context("write contents to stdout")?;
+                    let mut stdout = io::stdout().lock();
+                    stdout.write_all(&buf).context("write contents to stdout")?;
+                }
+                _ => bail!("object kind `{kind}` is not supported yet"),
+            };
         }
     }
-
     Ok(())
 }
