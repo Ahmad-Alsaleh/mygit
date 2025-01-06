@@ -28,6 +28,10 @@ enum Command {
     },
 }
 
+enum ObjectKind {
+    Blob,
+}
+
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     match args.command {
@@ -36,12 +40,18 @@ fn main() -> anyhow::Result<()> {
             fs::create_dir(".git/objects").unwrap();
             fs::create_dir(".git/refs").unwrap();
             fs::write(".git/HEAD", "ref: refs/heads/main\n").unwrap();
-            println!("Initialized git directory")
+            println!("Initialized git directory");
         }
         Command::CatFile {
-            pretty_print: _,
+            pretty_print,
             object_hash,
         } => {
+            ensure!(
+                pretty_print,
+                "Missing -p flag: Object type should be given using -p as object mode is not supported now"
+            );
+
+            // construct file reader
             let file = fs::File::open(format!(
                 ".git/objects/{}/{}",
                 &object_hash[..2],
@@ -51,6 +61,7 @@ fn main() -> anyhow::Result<()> {
             let decompressor = ZlibDecoder::new(file);
             let mut reader = BufReader::new(decompressor);
 
+            // read object file header
             let mut buf = Vec::new();
             let _ = reader.read_until(0, &mut buf);
             let header = CStr::from_bytes_with_nul(&buf)
@@ -59,32 +70,37 @@ fn main() -> anyhow::Result<()> {
                 .to_str()
                 .context(".git/objects file header is invalid UTF-8")?;
 
+            // parse object file header
             let Some((kind, size)) = header.split_once(' ') else {
                 bail!(".git/objects file header didn't have a space");
             };
 
-            match kind {
-                "blob" => {
-                    let size = size.parse::<usize>().context(format!(
-                        ".git/objects file header has invalide size `{size}`"
-                    ))?;
-
-                    buf.resize(size, 0);
-                    reader
-                        .read_exact(&mut buf)
-                        .context(".git/objects file contents exceeded given size in header")?;
-                    let n = reader
-                        .read(&mut [0])
-                        .context("validate EOF in .git/objects")?;
-                    ensure!(
-                        n == 0,
-                        ".git/object file has extra trailing bytes, expected {size} bytes only"
-                    );
-
-                    let mut stdout = io::stdout().lock();
-                    stdout.write_all(&buf).context("write contents to stdout")?;
-                }
+            let kind = match kind {
+                "blob" => ObjectKind::Blob,
                 _ => bail!("object kind `{kind}` is not supported yet"),
+            };
+
+            let size = size.parse::<usize>().context(format!(
+                ".git/objects file header has invalide size `{size}`"
+            ))?;
+
+            // read object contents
+            buf.resize(size, 0);
+            reader
+                .read_exact(&mut buf)
+                .context(".git/objects file contents exceeded given size in header")?;
+            let n = reader
+                .read(&mut [0])
+                .context("validate EOF in .git/objects")?;
+            ensure!(
+                n == 0,
+                ".git/object file has extra trailing bytes, expected {size} bytes only"
+            );
+
+            // print object contents
+            let mut stdout = io::stdout().lock();
+            match kind {
+                ObjectKind::Blob => stdout.write_all(&buf).context("write contents to stdout")?,
             };
         }
     }
