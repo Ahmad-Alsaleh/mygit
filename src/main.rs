@@ -4,7 +4,7 @@ use flate2::read::ZlibDecoder;
 use std::{
     ffi::CStr,
     fs,
-    io::{self, BufRead, BufReader, Read, Write},
+    io::{self, BufRead, BufReader},
 };
 
 /// Git in Rust
@@ -84,25 +84,52 @@ fn main() -> anyhow::Result<()> {
                 ".git/objects file header has invalide size `{size}`"
             ))?;
 
-            // read object contents
-            buf.resize(size, 0);
-            reader
-                .read_exact(&mut buf)
-                .context(".git/objects file contents exceeded given size in header")?;
-            let n = reader
-                .read(&mut [0])
-                .context("validate EOF in .git/objects")?;
-            ensure!(
-                n == 0,
-                ".git/object file has extra trailing bytes, expected {size} bytes only"
-            );
-
             // print object contents
-            let mut stdout = io::stdout().lock();
             match kind {
-                ObjectKind::Blob => stdout.write_all(&buf).context("write contents to stdout")?,
+                ObjectKind::Blob => {
+                    let mut reader = LimitReader::new(reader, size);
+                    let n = io::copy(&mut reader, &mut io::stdout().lock())
+                        .context("write contents of .git/object file to stdout")?;
+                    ensure!(
+                        n as usize == size,
+                        ".git/object file has extra trailing bytes, expected {size} bytes only"
+                    )
+                }
             };
         }
     }
     Ok(())
+}
+
+struct LimitReader<R: io::Read> {
+    reader: R,
+    limit: usize,
+}
+
+impl<R: io::Read> LimitReader<R> {
+    fn new(reader: R, limit: usize) -> Self {
+        Self { reader, limit }
+    }
+}
+
+impl<R: io::Read> io::Read for LimitReader<R> {
+    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+        if buf.len() > self.limit {
+            buf = &mut buf[..self.limit + 1];
+        }
+
+        let n = self.reader.read(buf)?;
+        if n > self.limit {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "LimitReader read more than sepcified limit of {} bytes (read {} bytes)",
+                    self.limit, n
+                ),
+            ));
+        }
+
+        self.limit -= n;
+        Ok(n)
+    }
 }
