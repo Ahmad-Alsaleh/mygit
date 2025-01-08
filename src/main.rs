@@ -1,10 +1,13 @@
 use anyhow::{bail, ensure, Context};
 use clap::{Parser, Subcommand};
-use flate2::read::ZlibDecoder;
+use flate2::write::ZlibEncoder;
+use flate2::{read::ZlibDecoder, Compression};
+use sha1::{Digest, Sha1};
 use std::{
     ffi::CStr,
     fs,
-    io::{self, BufRead, BufReader},
+    io::{self, BufRead, BufReader, Write},
+    path::PathBuf,
 };
 
 /// Git in Rust
@@ -25,6 +28,12 @@ enum Command {
         #[clap(short = 'p')]
         pretty_print: bool,
         object_hash: String,
+    },
+
+    HashObject {
+        #[clap(short = 'w')]
+        write: bool,
+        file_path: PathBuf,
     },
 }
 
@@ -80,9 +89,9 @@ fn main() -> anyhow::Result<()> {
                 _ => bail!("object kind `{kind}` is not supported yet"),
             };
 
-            let size = size.parse::<usize>().context(format!(
-                ".git/objects file header has invalide size `{size}`"
-            ))?;
+            let size = size
+                .parse::<usize>()
+                .with_context(|| format!(".git/objects file header has invalide size `{size}`"))?;
 
             // print object contents
             match kind {
@@ -97,8 +106,58 @@ fn main() -> anyhow::Result<()> {
                 }
             };
         }
+        Command::HashObject {
+            write: _,
+            file_path,
+        } => {
+            // construct file writer
+            let temp_file = fs::File::create("temp").context("create temp file for blob")?; // TODO: replace this with a real temp file path
+            let hash_writer = HashWriter::new(temp_file);
+            let mut compressor = ZlibEncoder::new(hash_writer, Compression::default());
+
+            // write the header
+            let size = fs::metadata(&file_path)
+                .with_context(|| format!("extractign stat of file: {}", file_path.display()))?
+                .len();
+            write!(compressor, "blob {}\0", size)?;
+
+            // write the contents of the file
+            let mut file = fs::File::open(file_path).context("open file")?;
+            io::copy(&mut file, &mut compressor).context("stream file into blob")?;
+
+            let hash_writer = compressor.finish()?;
+            let hash = hash_writer.hasher.finalize();
+
+            println!("{}", hex::encode(hash));
+        }
     }
     Ok(())
+}
+
+struct HashWriter<W: Write> {
+    writer: W,
+    hasher: Sha1,
+}
+
+impl<W: Write> HashWriter<W> {
+    fn new(writer: W) -> Self {
+        Self {
+            writer,
+            hasher: Sha1::new(),
+        }
+    }
+}
+
+impl<W: Write> Write for HashWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let n = self.writer.write(buf)?;
+        self.hasher.update(&buf[..n]);
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.writer.flush()
+    }
 }
 
 struct LimitReader<R: io::Read> {
