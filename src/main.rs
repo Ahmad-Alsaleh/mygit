@@ -1,12 +1,15 @@
 use anyhow::{bail, ensure, Context};
+
 use clap::{Parser, Subcommand};
 use flate2::write::ZlibEncoder;
 use flate2::{read::ZlibDecoder, Compression};
+
 use sha1::{Digest, Sha1};
+use std::io::Write;
 use std::{
     ffi::CStr,
     fs,
-    io::{self, BufRead, BufReader, Write},
+    io::{self, BufRead, BufReader, Read},
     path::PathBuf,
 };
 
@@ -106,58 +109,40 @@ fn main() -> anyhow::Result<()> {
                 }
             };
         }
-        Command::HashObject {
-            write: _,
-            file_path,
-        } => {
-            // construct file writer
-            let temp_file = fs::File::create("temp").context("create temp file for blob")?; // TODO: replace this with a real temp file path
-            let hash_writer = HashWriter::new(temp_file);
-            let mut compressor = ZlibEncoder::new(hash_writer, Compression::default());
+        Command::HashObject { write, file_path } => {
+            // read file
+            let mut file = fs::File::open(&file_path).context("open file")?;
+            let mut content = Vec::new();
+            let size = file.read_to_end(&mut content).context("read file")?;
 
-            // write the header
-            let size = fs::metadata(&file_path)
-                .with_context(|| format!("extractign stat of file: {}", file_path.display()))?
-                .len();
-            write!(compressor, "blob {}\0", size)?;
+            // construct object header
+            let header = format!("blob {size}\0");
+            let header = header.as_bytes();
 
-            // write the contents of the file
-            let mut file = fs::File::open(file_path).context("open file")?;
-            io::copy(&mut file, &mut compressor).context("stream file into blob")?;
+            // compute hash
+            let mut hasher = Sha1::new();
+            hasher.update(header);
+            hasher.update(&content);
+            let hash = hasher.finalize();
+            let hash = hex::encode(hash);
 
-            let hash_writer = compressor.finish()?;
-            let hash = hash_writer.hasher.finalize();
+            if write {
+                // create object file
+                fs::create_dir_all(format!(".git/objects/{}", &hash[..2]))
+                    .context("create directory in .git/objects")?;
+                let file = fs::File::create(format!(".git/objects/{}/{}", &hash[..2], &hash[2..]))
+                    .context("open object in .git/objects/")?;
 
-            println!("{}", hex::encode(hash));
+                // write compressed content to file
+                let mut writer = ZlibEncoder::new(file, Compression::default());
+                let _ = writer.write_all(header);
+                let _ = writer.write_all(&content);
+            }
+
+            println!("{}", hash);
         }
     }
     Ok(())
-}
-
-struct HashWriter<W: Write> {
-    writer: W,
-    hasher: Sha1,
-}
-
-impl<W: Write> HashWriter<W> {
-    fn new(writer: W) -> Self {
-        Self {
-            writer,
-            hasher: Sha1::new(),
-        }
-    }
-}
-
-impl<W: Write> Write for HashWriter<W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let n = self.writer.write(buf)?;
-        self.hasher.update(&buf[..n]);
-        Ok(n)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.writer.flush()
-    }
 }
 
 struct LimitReader<R: io::Read> {
