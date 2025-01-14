@@ -33,8 +33,10 @@ pub(crate) fn invoke(write: bool, file_path: PathBuf) -> anyhow::Result<()> {
 
         // write compressed content to file
         let mut writer = ZlibEncoder::new(file, Compression::default());
-        let _ = writer.write_all(header);
-        let _ = writer.write_all(&content);
+        writer.write_all(header).context("write header to file")?;
+        writer
+            .write_all(&content)
+            .context("write object content to file")?;
     }
 
     println!("{}", hash);

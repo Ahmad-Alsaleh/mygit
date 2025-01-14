@@ -1,9 +1,9 @@
-use anyhow::{ensure, Context};
+use anyhow::{bail, ensure, Context};
 use std::io;
 
 use crate::utils::{
     limit_reader::LimitReader,
-    object_utils::{get_object_header, get_object_path, get_object_reader, ObjectKind},
+    object_utils::{get_object_path, get_object_reader, parse_object_header, ObjectKind},
 };
 
 pub(crate) fn invoke(pretty_print: bool, object_hash: &str) -> anyhow::Result<()> {
@@ -14,7 +14,7 @@ pub(crate) fn invoke(pretty_print: bool, object_hash: &str) -> anyhow::Result<()
 
     let file_path = get_object_path(object_hash);
     let mut reader = get_object_reader(&file_path)?;
-    let (kind, size) = get_object_header(&mut reader)?;
+    let (kind, size) = parse_object_header(&mut reader)?;
 
     match kind {
         ObjectKind::Blob => {
@@ -26,6 +26,7 @@ pub(crate) fn invoke(pretty_print: bool, object_hash: &str) -> anyhow::Result<()
                 ".git/object file has extra trailing bytes, expected {size} bytes only"
             )
         }
+        _ => bail!("only blobs are supported right now"),
     };
 
     Ok(())

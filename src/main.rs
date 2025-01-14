@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+
 pub(crate) mod commands;
 pub(crate) mod utils;
 
@@ -28,6 +29,14 @@ enum Command {
         write: bool,
         file_path: PathBuf,
     },
+
+    /// List the contents of a tree object
+    LsTree {
+        /// list only filenames, one per line.
+        #[clap(long = "name-only")]
+        name_only: bool,
+        object_hash: String,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -40,9 +49,17 @@ fn main() -> anyhow::Result<()> {
         Command::CatFile {
             pretty_print,
             object_hash,
-        } => commands::cat_file::invoke(pretty_print, &object_hash)?,
+        } => {
+            commands::cat_file::invoke(pretty_print, &object_hash)?;
+        }
         Command::HashObject { write, file_path } => {
-            commands::hash_object::invoke(write, file_path)?
+            commands::hash_object::invoke(write, file_path)?;
+        }
+        Command::LsTree {
+            name_only,
+            object_hash,
+        } => {
+            commands::ls_tree::invoke(name_only, &object_hash)?;
         }
     };
 
