@@ -35,51 +35,71 @@ impl TreeEntry {
 
         Ok(())
     }
+}
 
-    pub(crate) fn parse_body(body_reader: &mut ObjectReader) -> anyhow::Result<(Self, usize)> {
+struct TreeEntryIterator {
+    body_reader: ObjectReader,
+    remaining_bytes: usize,
+}
+
+impl TreeEntryIterator {
+    fn new(body_reader: ObjectReader, expected_size: usize) -> Self {
+        Self {
+            body_reader,
+            remaining_bytes: expected_size,
+        }
+    }
+}
+
+impl Iterator for TreeEntryIterator {
+    type Item = TreeEntry;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining_bytes == 0 {
+            return None;
+        }
+
         let mut buf = Vec::new();
-        let n = body_reader
+        let n = self
+            .body_reader
             .read_until(0, &mut buf)
-            .context("read entry in tree object")?;
+            .expect("read entry in tree object");
+
         let tree_entry = CStr::from_bytes_with_nul(&buf)
             .expect("know there is exactly one null and it is at the end");
         let tree_entry = tree_entry
             .to_str()
-            .context(".git/objects file header is invalid UTF-8")?;
+            .expect(".git/objects file header is invalid UTF-8");
 
-        let Some((mode, name)) = tree_entry.split_once(' ') else {
-            bail!("tree entry doesn't have a space");
-        };
+        let (mode, name) = tree_entry
+            .split_once(' ')
+            .expect("tree entry doesn't have a space");
 
         let mode = mode
             .parse::<u32>()
-            .with_context(|| format!("tree entry has invalid object mode `{mode}`"))?;
-        let mode = ObjectMode::from_number(mode)
-            .with_context(|| format!("tree entry has invalid object mode `{mode}`"))?;
+            .expect("tree entry has invalid object mode");
+        let mode = ObjectMode::from_number(mode).expect("tree entry has invalid object mode");
 
         let mut buf = [0; 20];
-        body_reader
+        self.body_reader
             .read_exact(&mut buf)
-            .context("SHA is less than 20 bytes")?;
+            .expect("SHA is less than 20 bytes");
 
-        let tree_entry = Self::new(mode, name, buf);
+        self.remaining_bytes -= n + 20;
 
-        Ok((tree_entry, n + 21))
+        Some(TreeEntry::new(mode, name, buf))
     }
 }
 
 pub(crate) fn invoke(name_only: bool, object_hash: &str) -> anyhow::Result<()> {
-    let mut object = Object::from(object_hash);
+    let object = Object::from(object_hash);
 
     let ObjectKind::Tree = object.kind else {
         bail!("provided objects is not a tree");
     };
 
     let mut stdout = io::stdout().lock();
-    let mut n = 0;
-    while n < object.expected_size {
-        let (tree_entry, len) = TreeEntry::parse_body(&mut object.body_reader)?;
-        n += len;
+    for tree_entry in TreeEntryIterator::new(object.body_reader, object.expected_size) {
         tree_entry.display(&mut stdout, name_only)?;
     }
 
