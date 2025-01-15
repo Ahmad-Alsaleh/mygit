@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 pub(crate) mod commands;
+pub(crate) mod objects;
 pub(crate) mod utils;
 
 /// Git in Rust
