@@ -24,7 +24,14 @@ impl TreeEntry {
 
     pub(crate) fn display<W: Write>(&self, writer: &mut W, name_only: bool) -> anyhow::Result<()> {
         if name_only {
-            writeln!(writer, "{}", self.name).context("write tree entry to")?;
+            writeln!(writer, "{}", self.name).context("write tree entry")?;
+        } else {
+            let mode = self.mode.to_number();
+            let object_type = self.mode.to_object_type();
+            let hash = hex::encode(self.sha);
+            let name = &self.name;
+            writeln!(writer, "{mode:06} {object_type} {hash}\t{name}")
+                .context("write tree entry")?;
         }
 
         Ok(())

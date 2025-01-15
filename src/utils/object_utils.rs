@@ -40,6 +40,13 @@ impl ObjectMode {
             ObjectMode::Directory => 40000,
         }
     }
+
+    pub(crate) fn to_object_type(&self) -> &str {
+        match self {
+            Self::Directory => "tree",
+            Self::RegularFile | Self::ExcutableFile | Self::SymbolicLink => "blob",
+        }
+    }
 }
 
 type ObjectReader = BufReader<ZlibDecoder<fs::File>>;
