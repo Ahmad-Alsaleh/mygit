@@ -6,4 +6,4 @@
 #
 # Learn more: https://codecrafters.io/program-interface
 
-exec /tmp/codecrafters-build-git-rust/release/codecrafters-git "$@"
+exec /tmp/codecrafters-build-git-rust/release/mygit "$@"
