@@ -10,10 +10,10 @@ pub(crate) fn invoke(pretty_print: bool, object_hash: &str) -> anyhow::Result<()
         "Missing -p flag: Object type should be given using -p as object mode is not supported now"
     );
 
-    let object = Object::from(object_hash);
+    let object = Object::new(object_hash);
 
     let ObjectKind::Blob = object.kind else {
-        bail!("only blobs are supported right now");
+        bail!("object type `{}` is not supported right now", object.kind);
     };
 
     let mut reader = LimitReader::new(object.body_reader, object.expected_size);

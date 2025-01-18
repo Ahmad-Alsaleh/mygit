@@ -2,6 +2,7 @@ use anyhow::{bail, Context};
 use flate2::read::ZlibDecoder;
 use std::{
     ffi::CStr,
+    fmt::Display,
     fs,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
@@ -10,6 +11,15 @@ use std::{
 pub(crate) enum ObjectKind {
     Blob,
     Tree,
+}
+
+impl Display for ObjectKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ObjectKind::Blob => write!(f, "blob"),
+            ObjectKind::Tree => write!(f, "tree"),
+        }
+    }
 }
 
 pub(crate) enum ObjectMode {
@@ -55,8 +65,8 @@ pub(crate) struct Object {
     pub(crate) body_reader: ObjectReader,
 }
 
-impl From<&str> for Object {
-    fn from(object_hash: &str) -> Self {
+impl Object {
+    pub(crate) fn new(object_hash: &str) -> Self {
         let object_path = Self::get_path(object_hash);
         let mut reader = Self::get_reader(&object_path).unwrap();
         let (kind, expected_size) = Self::parse_header(&mut reader).unwrap();
@@ -67,10 +77,8 @@ impl From<&str> for Object {
             body_reader: reader,
         }
     }
-}
 
-impl Object {
-    pub fn get_path(hash: &str) -> PathBuf {
+    fn get_path(hash: &str) -> PathBuf {
         PathBuf::from(format!(".git/objects/{}/{}", &hash[..2], &hash[2..]))
     }
 
