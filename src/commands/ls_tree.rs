@@ -37,12 +37,12 @@ impl TreeEntry {
     }
 }
 
-struct TreeEntryIterator {
+struct TreeEntryIter {
     body_reader: ObjectReader,
     remaining_bytes: usize,
 }
 
-impl TreeEntryIterator {
+impl TreeEntryIter {
     fn new(body_reader: ObjectReader, expected_size: usize) -> Self {
         Self {
             body_reader,
@@ -51,7 +51,7 @@ impl TreeEntryIterator {
     }
 }
 
-impl Iterator for TreeEntryIterator {
+impl Iterator for TreeEntryIter {
     type Item = TreeEntry;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -99,7 +99,7 @@ pub(crate) fn invoke(name_only: bool, object_hash: &str) -> anyhow::Result<()> {
     };
 
     let mut stdout = io::stdout().lock();
-    for tree_entry in TreeEntryIterator::new(object.body_reader, object.expected_size) {
+    for tree_entry in TreeEntryIter::new(object.body_reader, object.expected_size) {
         tree_entry.display(&mut stdout, name_only)?;
     }
 
