@@ -42,6 +42,7 @@ enum Command {
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+
     match args.command {
         Command::Init => {
             commands::init::invoke();
