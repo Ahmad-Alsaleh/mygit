@@ -30,13 +30,13 @@ pub(crate) enum ObjectMode {
 }
 
 impl ObjectMode {
-    pub(crate) fn from_number(input: u32) -> Option<ObjectMode> {
+    pub(crate) fn from_number(input: u32) -> anyhow::Result<ObjectMode> {
         match input {
-            100644 => Some(ObjectMode::RegularFile),
-            100755 => Some(ObjectMode::ExcutableFile),
-            120000 => Some(ObjectMode::SymbolicLink),
-            40000 => Some(ObjectMode::Directory),
-            _ => None,
+            100644 => Ok(ObjectMode::RegularFile),
+            100755 => Ok(ObjectMode::ExcutableFile),
+            120000 => Ok(ObjectMode::SymbolicLink),
+            40000 => Ok(ObjectMode::Directory),
+            _ => bail!("Invalid object mode {input}"),
         }
     }
 
