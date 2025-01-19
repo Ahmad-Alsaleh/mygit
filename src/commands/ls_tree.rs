@@ -29,6 +29,7 @@ impl TreeEntry {
             let object_type = self.mode.to_object_type();
             let hash = hex::encode(self.sha);
             let name = &self.name;
+
             writeln!(writer, "{mode:06} {object_type} {hash}\t{name}")
                 .context("write tree entry")?;
         }
@@ -40,6 +41,8 @@ impl TreeEntry {
 struct TreeEntryIter {
     body_reader: ObjectReader,
     remaining_bytes: usize,
+    entry_header_buf: Vec<u8>,
+    sha_buf: [u8; 20],
 }
 
 impl TreeEntryIter {
@@ -47,6 +50,8 @@ impl TreeEntryIter {
         Self {
             body_reader,
             remaining_bytes: expected_size,
+            entry_header_buf: Vec::new(),
+            sha_buf: [0; 20],
         }
     }
 }
@@ -59,19 +64,16 @@ impl Iterator for TreeEntryIter {
             return None;
         }
 
-        let mut buf = Vec::new();
+        self.entry_header_buf.clear();
         let n = self
             .body_reader
-            .read_until(0, &mut buf)
+            .read_until(0, &mut self.entry_header_buf)
             .expect("read entry in tree object");
 
-        let tree_entry = CStr::from_bytes_with_nul(&buf)
-            .expect("know there is exactly one null and it is at the end");
-        let tree_entry = tree_entry
+        let (mode, name) = CStr::from_bytes_with_nul(&self.entry_header_buf)
+            .expect("know there is exactly one null and it is at the end")
             .to_str()
-            .expect(".git/objects file header is invalid UTF-8");
-
-        let (mode, name) = tree_entry
+            .expect(".git/objects file header is invalid UTF-8")
             .split_once(' ')
             .expect("tree entry doesn't have a space");
 
@@ -80,14 +82,13 @@ impl Iterator for TreeEntryIter {
             .expect("tree entry has invalid object mode");
         let mode = ObjectMode::from_number(mode).expect("tree entry has invalid object mode");
 
-        let mut buf = [0; 20];
         self.body_reader
-            .read_exact(&mut buf)
+            .read_exact(&mut self.sha_buf)
             .expect("SHA is less than 20 bytes");
 
         self.remaining_bytes -= n + 20;
 
-        Some(TreeEntry::new(mode, name, buf))
+        Some(TreeEntry::new(mode, name, self.sha_buf))
     }
 }
 
