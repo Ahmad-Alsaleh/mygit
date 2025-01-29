@@ -80,17 +80,17 @@ impl Object {
         }
     }
 
-    pub(crate) fn compute_hash(content: &[u8], size: usize) -> anyhow::Result<Vec<u8>> {
+    pub(crate) fn compute_hash(file_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
         let mut hasher = Sha1::new();
-        hasher.update(format!("blob {size}\0"));
-        hasher.update(content);
+        hasher.update(format!("blob {}\0", file_bytes.len()));
+        hasher.update(file_bytes);
         let hash = hasher.finalize();
         let hash = hash.to_vec();
 
         Ok(hash)
     }
 
-    pub(crate) fn write(hash: &str, content: &[u8], size: usize) -> anyhow::Result<()> {
+    pub(crate) fn write(hash: &str, file_bytes: &[u8]) -> anyhow::Result<()> {
         // create object file
         let object_path = Object::get_path(hash);
         fs::create_dir_all(
@@ -102,12 +102,12 @@ impl Object {
         let file = fs::File::create(object_path).context("open object in .git/objects/")?;
 
         // write compressed content to object file
-        let header = format!("blob {size}\0");
+        let header = format!("blob {}\0", file_bytes.len());
         let header = header.as_bytes();
         let mut writer = ZlibEncoder::new(file, Compression::default());
         writer.write_all(header).context("write header to file")?;
         writer
-            .write_all(content)
+            .write_all(file_bytes)
             .context("write object content to file")?;
 
         Ok(())
