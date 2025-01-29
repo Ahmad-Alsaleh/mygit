@@ -93,7 +93,7 @@ impl Iterator for TreeEntryIter {
 }
 
 pub(crate) fn invoke(name_only: bool, object_hash: &str) -> anyhow::Result<()> {
-    let object = Object::new(object_hash);
+    let object = Object::open(object_hash);
 
     let ObjectKind::Tree = object.kind else {
         bail!("provided objects is not a tree");

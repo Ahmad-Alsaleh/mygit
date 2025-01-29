@@ -10,7 +10,7 @@ pub(crate) fn invoke(pretty_print: bool, object_hash: &str) -> anyhow::Result<()
         "Missing -p flag: Object type should be given using -p as object mode is not supported now"
     );
 
-    let object = Object::new(object_hash);
+    let object = Object::open(object_hash);
 
     let ObjectKind::Blob = object.kind else {
         bail!("object type `{}` is not supported right now", object.kind);
